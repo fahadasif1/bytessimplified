@@ -74,9 +74,8 @@ If the Pages project is connected to a Git repo, commit these files to that repo
   you scroll. `NARROW` overrides the framing on phones.
 - **Contact form:** opens the visitor's email app addressed to info@bytessimplified.com
   (same behaviour as the current site). Nothing is sent from the page.
-- **QR code** (hero, desktop only): encodes `mailto:info@bytessimplified.com`. To point it
-  somewhere else, such as an App Store page, regenerate the `<path>` inside `.qr`. Any QR
-  generator that outputs a 29×29 module SVG path will work.
+- **Motion toggle:** the small "Motion" control in the bottom-left corner pauses and resumes
+  the background. It is required for accessibility (WCAG 2.2.2), so keep it.
 
 ## Performance and accessibility
 
@@ -85,8 +84,8 @@ If the Pages project is connected to a Git repo, commit these files to that repo
 - **Adaptive quality:** if frames run slow, the engine lowers resolution, then particle
   count, then turns off reflections. Add `?adaptive=off` to the URL to disable this when testing.
 - **Reduced motion:** visitors with *prefers-reduced-motion* get a still scene and no
-  reveal animations or custom cursor. The ▶ button in the header lets them opt in.
-- **Pause/play** button in the header for everyone (WCAG 2.2.2).
+  reveal animations or custom cursor. The Motion toggle lets them opt in.
+- **Motion toggle** in the bottom-left corner pauses the scene for everyone (WCAG 2.2.2).
 - **Draw order:** particles, then stars, then the water floor. Drawing the floor before
   the big particle pass hung AMD Radeon 890M GPUs (Mesa 26), so keep this order.
 - **No WebGL** (or a lost GPU context): the page falls back to a static gradient backdrop

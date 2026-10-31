@@ -106,9 +106,23 @@ main { overflow-x: clip; }
 }
 .icon-btn:hover { background: rgba(255, 255, 255, .1); border-color: rgba(255, 255, 255, .26); }
 .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.motion-toggle .i-play { display: none; fill: currentColor; stroke: none; }
-.motion-paused .motion-toggle .i-play { display: block; }
-.motion-paused .motion-toggle .i-pause { display: none; }
+/* Motion toggle: a quiet corner control — bars dance while the scene plays, settle when paused. */
+.motion-toggle {
+  position: fixed; z-index: 40; left: var(--pad); bottom: max(18px, env(safe-area-inset-bottom));
+  display: inline-flex; align-items: center; gap: 10px; height: 30px; padding: 0 13px 0 11px;
+  border-radius: 999px; border: 1px solid rgba(255, 255, 255, .11); background: rgba(6, 8, 16, .66);
+  color: #aeb8cc; font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase;
+  cursor: pointer; opacity: 0; transition: opacity .8s var(--ease) 1.6s, color .25s, border-color .25s;
+}
+.is-ready .motion-toggle { opacity: 1; }
+.motion-toggle:hover { color: #fff; border-color: rgba(255, 255, 255, .24); }
+.bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 11px; }
+.bars i { width: 2px; height: 100%; border-radius: 1px; background: currentColor; transform-origin: 50% 100%; animation: bar 1.15s ease-in-out infinite; }
+.bars i:nth-child(2) { animation-delay: -.35s; }
+.bars i:nth-child(3) { animation-delay: -.7s; }
+.bars i:nth-child(4) { animation-delay: -.95s; }
+@keyframes bar { 0%, 100% { transform: scaleY(.28); } 50% { transform: scaleY(1); } }
+.motion-paused .bars i { animation: none; transform: scaleY(.28); }
 
 /* ------------------------------------------------------------ glass */
 .card {
@@ -176,7 +190,7 @@ main { overflow-x: clip; }
 .hero {
   position: relative; min-height: 100vh; min-height: 100svh;
   display: flex; flex-direction: column; justify-content: flex-end;
-  padding: calc(var(--header-h) + 24px) 0 clamp(28px, 6vh, 64px);
+  padding: calc(var(--header-h) + 24px) 0 clamp(64px, 9vh, 96px);
 }
 .hero-bottom { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: end; gap: 40px; }
 .hero h1 { font-size: clamp(54px, 8.4vw, 138px); }
@@ -189,15 +203,6 @@ main { overflow-x: clip; }
 }
 .badge i { width: 7px; height: 7px; border-radius: 50%; background: #3b8bff; box-shadow: 0 0 10px 2px rgba(59, 139, 255, .85); }
 
-.qr-card {
-  position: absolute; z-index: 3; top: calc(var(--header-h) + 22px); right: var(--pad);
-  display: flex; align-items: center; gap: 12px; color: #fff; text-decoration: none;
-}
-.qr { width: 66px; height: 66px; border-radius: 6px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .25), 0 12px 30px -12px rgba(47, 125, 255, .7); }
-.qr-copy { display: grid; gap: 7px; }
-.qr-text { font-size: 13px; font-weight: 600; line-height: 1.25; }
-.qr-icons { display: flex; gap: 9px; color: #dfe6f3; }
-.qr-icons svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ------------------------------------------------------------ platforms */
 .platforms { position: relative; overflow: clip; min-height: 120vh; min-height: 120svh; padding-top: clamp(110px, 16vh, 170px); }
@@ -397,7 +402,6 @@ a.v:hover { color: var(--cyan); }
   .menu-btn { display: grid; }
   .hero-bottom { grid-template-columns: 1fr; gap: 26px; }
   .hero-right { justify-self: start; max-width: 520px; }
-  .qr-card { display: none; }
   .split-head { grid-template-columns: 1fr; gap: 0; }
   .split-head .lede { margin-top: 22px; }
   .contact-grid { grid-template-columns: 1fr; }
@@ -407,6 +411,8 @@ a.v:hover { color: var(--cyan); }
   .chip svg { width: 17px; height: 17px; }
 }
 @media (max-width: 600px) {
+  .motion-label { display: none; }
+  .motion-toggle { padding: 0 9px; }
   /* Too narrow to orbit without chips colliding: heading on top, tree in the middle, chips as a row at the bottom. */
   .platforms { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; justify-content: space-between; padding-bottom: 28px; }
   .orbit { position: static; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: auto; height: auto; padding: 0 var(--pad); transform: none; }
