@@ -11,7 +11,7 @@ of the business:
 | Services | glass **cube** with "Bytes Simplified" and the pixel mark on its faces | engineered products |
 | About | **ball of yarn** (five knotted loops) | "the tangle of modern technology" |
 | Approach | **pipeline**: four nodes lined up with the four step cards | Discover → Design → Build → Launch |
-| Products | **phone** with an app grid and a floating notification | products, published |
+| Products | **phone** with an app grid and a floating notification | apps on the App Store and Google Play, web platforms, CRMs |
 | Contact | the Bytes Simplified **pixel mark**, built from particles | the brand, simplified |
 
 There is no build step. It is a plain static site, deployed the same way as the current one.
@@ -72,10 +72,18 @@ If the Pages project is connected to a Git repo, commit these files to that repo
   `assets/js/app.js`. Each entry sets the camera, the shape offset, the scale, floor
   brightness and particle opacity. The scene blends between neighbouring sections as
   you scroll. `NARROW` overrides the framing on phones.
-- **Contact form:** opens the visitor's email app addressed to info@bytessimplified.com
-  (same behaviour as the current site). Nothing is sent from the page.
-- **Motion toggle:** the small "Motion" control in the bottom-left corner pauses and resumes
-  the background. It is required for accessibility (WCAG 2.2.2), so keep it.
+- **Nav links:** each section's cards are marked `data-land`. Clicking Services, Approach or
+  Products scrolls so those cards are fully on screen (not just to the section's top edge);
+  every "Start a project" link lands on the project brief (`#contact`).
+- **Project brief (contact form):** sends straight to info@bytessimplified.com through
+  [FormSubmit](https://formsubmit.co) — free, no account. **One-time setup:** the first
+  enquiry sent from the live site makes FormSubmit email info@bytessimplified.com an
+  "Activate Form" link; click it and every enquiry after that arrives in the inbox. Until
+  then (or if FormSubmit is ever down) the visitor sees a fallback that opens their email
+  app with the brief filled in, or copies it. The address lives in the form's `action`.
+  A hidden `_honey` field quietly drops spam bots.
+- **Pause animation:** the footer's "Pause animation" button stops the background. It is
+  required for accessibility (WCAG 2.2.2), so keep it.
 
 ## Performance and accessibility
 
@@ -84,8 +92,10 @@ If the Pages project is connected to a Git repo, commit these files to that repo
 - **Adaptive quality:** if frames run slow, the engine lowers resolution, then particle
   count, then turns off reflections. Add `?adaptive=off` to the URL to disable this when testing.
 - **Reduced motion:** visitors with *prefers-reduced-motion* get a still scene and no
-  reveal animations or custom cursor. The Motion toggle lets them opt in.
-- **Motion toggle** in the bottom-left corner pauses the scene for everyone (WCAG 2.2.2).
+  reveal animations or custom cursor. "Play animation" in the footer lets them opt in.
+- **No animated blur:** reveals fade and slide; headings fake a blur-in with a text glow.
+  Animating `filter: blur()` on many elements crashed WebKit, so don't bring it back.
+- **Pause animation** in the footer stops the scene for everyone (WCAG 2.2.2).
 - **Draw order:** particles, then stars, then the water floor. Drawing the floor before
   the big particle pass hung AMD Radeon 890M GPUs (Mesa 26), so keep this order.
 - **No WebGL** (or a lost GPU context): the page falls back to a static gradient backdrop

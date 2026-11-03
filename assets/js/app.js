@@ -100,11 +100,74 @@
     });
   }
 
-  // Fixed header: "#top" can't be scrolled to as an anchor, so do it by hand.
-  $$('a[href="#top"]').forEach(function (a) {
+  /* ---------------------------------------------------------- in-page links
+     A section's top edge isn't the useful place to land: its cards sit at the
+     bottom, under the shape. Scroll so the cards (marked data-land) are fully on
+     screen, and land "Start a project" right on the brief. */
+  // Layout position, ignoring the transform of a reveal that may still be running.
+  function pageTop(el) { var y = 0; for (; el; el = el.offsetParent) y += el.offsetTop; return y; }
+  function headerSpace() { return parseFloat(getComputedStyle(root).getPropertyValue('--header-h')) || 0; }
+  function landingFor(el) {
+    if (el.classList.contains('brief')) return pageTop(el) - headerSpace() - 28;
+    var y = pageTop(el), cards = $('[data-land]', el);
+    if (cards) {
+      var h = cards.offsetHeight;
+      // Only when the cards fit on screen at all; on phones they stack, so start at the heading.
+      if (h + headerSpace() + 40 < window.innerHeight) y = Math.max(y, pageTop(cards) + h + 28 - window.innerHeight);
+    }
+    return y;
+  }
+  function goTo(id, how) {
+    var el = id === 'top' ? null : document.getElementById(id);
+    if (id !== 'top' && !el) return null;
+    var y = el ? clamp(landingFor(el), 0, document.documentElement.scrollHeight - window.innerHeight) : 0;
+    try { window.scrollTo({ top: y, behavior: how }); } catch (err) { window.scrollTo(0, y); }
+    return el || document.body;
+  }
+  // Run fn once a smooth scroll has come to rest.
+  function afterScroll(fn) {
+    var last = -1, still = 0, tries = 0;
+    (function check() {
+      var y = window.scrollY;
+      still = y === last ? still + 1 : 0; last = y;
+      if (still >= 3 || ++tries > 60) fn(); else setTimeout(check, 80);
+    })();
+  }
+  function callBrief(el) {
+    el.classList.remove('is-called'); void el.offsetWidth; el.classList.add('is-called');
+  }
+  $$('a[href^="#"]').forEach(function (a) {
+    var id = a.getAttribute('href').slice(1);
+    if (!id || id === 'main') return;   // the skip link keeps its native behaviour
     a.addEventListener('click', function (e) {
+      if (menu && !menu.hidden) setMenu(false);
+      var el = goTo(id, reduce ? 'auto' : 'smooth');
+      if (!el) return;
       e.preventDefault();
-      window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+      if (id === 'top') return;
+      if (history.pushState) history.pushState(null, '', '#' + id);
+      // Keyboard and screen-reader users continue from the section they jumped to.
+      if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+      el.focus({ preventScroll: true });
+      if (el.classList.contains('brief')) afterScroll(function () { callBrief(el); });
+    });
+  });
+  // Arriving with a hash (e.g. from the legal pages): once the browser has made its own jump,
+  // move to the same spot a click would — unless the visitor has already started scrolling.
+  var moved = false;
+  ['wheel', 'touchstart', 'keydown'].forEach(function (t) {
+    window.addEventListener(t, function () { moved = true; }, { once: true, passive: true });
+  });
+  window.addEventListener('load', function () {
+    var id = location.hash.slice(1), el = id && id !== 'main' ? document.getElementById(id) : null;
+    if (!el) return;
+    // Measure with the web fonts applied, or the landing is off by the fallback font's line heights.
+    (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(function () {
+      requestAnimationFrame(function () {
+        if (moved) return;
+        goTo(id, 'instant');
+        if (el.classList.contains('brief')) callBrief(el);
+      });
     });
   });
 
@@ -290,18 +353,16 @@
   var orbitKick = function () {};
   function setPaused(p) {
     paused = p;
-    motionBtn.setAttribute('aria-pressed', String(p));
-    motionBtn.setAttribute('aria-label', p ? 'Play background motion' : 'Pause background motion');
-    motionBtn.title = p ? 'Play motion' : 'Pause motion';
+    motionBtn.textContent = p ? 'Play animation' : 'Pause animation';
     root.classList.toggle('motion-paused', p);
     if (engine) engine.setStill(p);
     if (!p) orbitKick();
   }
+  // Lives in the footer's small print (WCAG 2.2.2: moving content must be pausable).
   if (engine && motionBtn) {
+    motionBtn.hidden = false;
     setPaused(paused);
     motionBtn.addEventListener('click', function () { setPaused(!paused); });
-  } else if (motionBtn) {
-    motionBtn.hidden = true;
   }
 
   /* ---------------------------------------------------------- orbiting chips */
@@ -374,20 +435,133 @@
     sio.observe(stats);
   }
 
-  /* ---------------------------------------------------------- contact form → email */
+  /* ---------------------------------------------------------- project brief → inbox
+     Sent with FormSubmit (formsubmit.co) to the address in the form's action. If it
+     can't be delivered, the visitor gets the brief as a ready-made email instead. */
   var form = $('#contact-form');
   if (form) {
+    var f = { name: $('#cf-name'), email: $('#cf-email'), company: $('#cf-company'), message: $('#cf-message') };
+    var steps = { topics: $('[data-step="topics"]', form), you: $('[data-step="you"]', form),
+                  project: $('[data-step="project"]', form), send: $('.bstep-send', form) };
+    var states = { sent: $('[data-state="sent"]', form), failed: $('[data-state="failed"]', form) };
+    var tried = false, mail = { subject: '', body: '' };
+
+    var val = function (el) { return el.value.trim(); };
+    var topics = function () { return $$('input[name="topic"]:checked', form).map(function (c) { return c.value; }); };
+    function problems() {
+      var email = val(f.email);
+      return {
+        name: val(f.name) ? '' : 'Please tell us your name.',
+        email: !email ? 'We need an email address to reply to.'
+             : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? '' : 'That email address doesn’t look quite right.',
+        message: val(f.message) ? '' : 'A line or two about the project is plenty.'
+      };
+    }
+    function showProblems(p) {
+      Object.keys(p).forEach(function (k) {
+        var field = f[k].closest('.field');
+        field.classList.toggle('is-invalid', !!p[k]);
+        if (p[k]) f[k].setAttribute('aria-invalid', 'true'); else f[k].removeAttribute('aria-invalid');
+        $('.field-err', field).textContent = p[k];
+      });
+    }
+    // Light each step on the rail as it's completed; errors only appear after a first attempt.
+    function progress() {
+      var p = problems(), ready = !p.name && !p.email && !p.message;
+      steps.topics.classList.toggle('is-done', topics().length > 0);
+      steps.you.classList.toggle('is-done', !p.name && !p.email);
+      steps.project.classList.toggle('is-done', !p.message);
+      steps.send.classList.toggle('is-done', ready);
+      form.classList.toggle('is-ready', ready);
+      if (tried) showProblems(p);
+      return p;
+    }
+    form.addEventListener('input', progress);
+    form.addEventListener('change', progress);
+    f.message.addEventListener('input', function () {
+      f.message.style.height = 'auto';
+      f.message.style.height = f.message.scrollHeight + 'px';
+    });
+    // The message box's label strip sits above the textarea; clicking it still puts the caret inside.
+    $$('.field-box', form).forEach(function (box) {
+      box.addEventListener('mousedown', function (e) {
+        if (e.target === box) { e.preventDefault(); $('input, textarea', box).focus(); }
+      });
+    });
+
+    function finish(state) {
+      form.style.minHeight = form.offsetHeight + 'px';   // keep the panel steady while the content swaps
+      form.classList.remove('is-sending');
+      form.classList.add('is-finished');
+      Object.keys(states).forEach(function (k) { states[k].hidden = k !== state; });
+      $('.done-title', states[state]).focus({ preventScroll: true });
+    }
+    function reopen(clear) {
+      if (clear) { form.reset(); f.message.style.height = ''; tried = false; showProblems({ name: '', email: '', message: '' }); }
+      form.classList.remove('is-finished');
+      form.style.minHeight = '';
+      states.sent.hidden = states.failed.hidden = true;
+      progress();
+      (clear ? f.name : f.message).focus();
+    }
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      var name = form.name.value.trim(), email = form.email.value.trim();
-      var topic = form.topic.value, message = form.message.value.trim();
-      if (!name || !email || !message || !form.email.checkValidity()) { form.reportValidity(); return; }
-      var subject = 'New enquiry: ' + topic + ' — ' + name;
-      var body = 'Name: ' + name + '\nEmail: ' + email + '\nInterested in: ' + topic +
-                 '\n\n' + message + '\n\n— Sent from bytessimplified.com';
-      window.location.href = 'mailto:info@bytessimplified.com?subject=' +
-        encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+      if (form.classList.contains('is-sending')) return;
+      tried = true;
+      var p = progress(), bad = ['name', 'email', 'message'].filter(function (k) { return p[k]; });
+      if (bad.length) { f[bad[0]].focus(); return; }
+
+      var t = topics(), name = val(f.name), email = val(f.email), company = val(f.company), message = val(f.message);
+      mail.subject = 'New enquiry' + (t.length ? ': ' + t.join(', ') : '') + ' — ' + name;
+      mail.body = ['Name: ' + name, 'Email: ' + email].concat(company ? ['Company: ' + company] : [], t.length ? ['Interested in: ' + t.join(', ')] : [])
+        .join('\n') + '\n\n' + message + '\n\n— Sent from bytessimplified.com';
+      $('[data-first]', states.sent).textContent = ', ' + name.split(/\s+/)[0];
+      $('[data-email]', states.sent).textContent = email;
+      $('[data-mailto]', states.failed).href = 'mailto:info@bytessimplified.com?subject=' +
+        encodeURIComponent(mail.subject) + '&body=' + encodeURIComponent(mail.body);
+
+      if (val($('#cf-hp'))) { finish('sent'); return; }   // a bot filled the hidden field: pretend, send nothing
+
+      form.classList.add('is-sending');
+      var ctrl = window.AbortController ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+      fetch(form.action.replace('formsubmit.co/', 'formsubmit.co/ajax/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          _subject: mail.subject, _template: 'table', _captcha: 'false', _replyto: email,
+          name: name, email: email, company: company || '—', interested_in: t.join(', ') || '—', message: message
+        }),
+        signal: ctrl ? ctrl.signal : undefined
+      }).then(function (res) {
+        return res.ok ? res.json() : Promise.reject(new Error('HTTP ' + res.status));
+      }).then(function (data) {
+        clearTimeout(timer);
+        if (!data || String(data.success) !== 'true') throw new Error((data && data.message) || 'not sent');
+        finish('sent');
+      }).catch(function (err) {
+        clearTimeout(timer);
+        if (window.console) console.warn('[brief] not sent:', err.message);
+        finish('failed');
+      });
     });
+
+    $('[data-copy]', form).addEventListener('click', function () {
+      var btn = this, text = 'To: info@bytessimplified.com\nSubject: ' + mail.subject + '\n\n' + mail.body;
+      var copied = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy brief'; }, 2200); };
+      function legacy() {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        try { if (document.execCommand('copy')) copied(); } catch (err) { /* nothing more to try */ }
+        document.body.removeChild(ta);
+      }
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(copied, legacy);
+      else legacy();
+    });
+    $('[data-edit]', form).addEventListener('click', function () { reopen(false); });
+    $('[data-reset]', form).addEventListener('click', function () { reopen(true); });
   }
 
   /* ---------------------------------------------------------- cursor */
